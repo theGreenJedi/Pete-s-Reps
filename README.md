@@ -1,155 +1,124 @@
 # Pete's Reps
 
-**Pete's Reps** is an Android-first, local-first daily training app built around one simple idea: a workout program should keep learning from what you actually do instead of ending after eight weeks or eventually sending you back to beginner prescriptions.
+**Pete's Reps** is an Android-first, local-first physical-training app built around one rule: **capability first**.
 
-Pete's Reps generates varied bodyweight sessions, records actual performance, and adapts future work from that history. Workouts are hard-capped at **25 minutes**. A pull-up bar is the only required piece of exercise equipment.
+Open the app, see today's work, train for no more than **25 minutes total**, record what actually happened, and leave. The engine remembers the longitudinal history and quietly chooses the next appropriate work.
 
-The project is intentionally small, owner-controlled, and usable without an account, subscription, cloud service, analytics platform, or permanent network connection.
+No account. No subscription. No social feed. No visible progression ladders. No benchmark-test days required.
 
-## What makes Pete's Reps different
+## Download & power up
 
-- **25 minutes is a hard ceiling.** Progress is never achieved by turning a short daily session into a two-hour workout.
-- **The app remembers.** If Day 1 prescribes three push-ups, Day 300 should reflect the work completed during Days 1-299 rather than starting over at three push-ups.
-- **Progression has multiple dimensions.** Reps, sets, movement difficulty, leverage, range of motion, tempo, pauses, unilateral work, rest, and density can all progress.
-- **Variety is structured, not random.** Anchor movements provide measurable progression while rotating accessory, mobility, movement, and conditioning work prevents the same handful of exercises from repeating forever.
-- **Eight-week / 56-day cycles organize training; they do not end it.** Day 57 begins the next cycle. Day 300, Day 600, and beyond remain part of the same longitudinal training history.
-- **Broad physical capability matters.** Strength, pulling, pushing, legs, trunk strength, mobility, conditioning, crawling, ground movement, balance, and martial movement all belong in the library.
-- **Training inspiration is broad.** Strength Side-style mobility and bodyweight work, U.S. Marine Corps physical-training traditions, calisthenics, and martial-arts movement inform the philosophy. Pete's Reps uses its own programming, descriptions, exercise library, and progression logic.
-- **Exercise demonstrations are supported.** Exercises can carry local video, animation, image-sequence, or movement-cue assets, but demonstrations are not required for the training engine to function.
-- **Your data stays local.** Training history is stored on the device in SQLite.
+Pete's Reps is currently an early experimental Android build.
 
-See [docs/CANON.md](docs/CANON.md) for the project rules and design constraints.
+**Fastest current install path:**
 
-## Current status
+1. Open this repository's **Actions** tab.
+2. Open the newest successful **Android CI** run on `main`.
+3. Download the **`petes-reps-debug-apk`** artifact.
+4. Extract the ZIP and install **`app-debug.apk`** on the Android device.
+5. Open Pete's Reps, review the complete session, tap **Start session**, and train.
 
-Pete's Reps is an **early experimental Android build**. The first milestone is a dependable adaptive training engine rather than a giant fitness platform.
+Full step-by-step instructions, ADB installation, updating cautions, and first-run behavior are in **[docs/INSTALL.md](docs/INSTALL.md)**.
 
-The current implementation includes:
+> The current repository artifact is a debug APK. Stable release signing and direct GitHub Release downloads are required before this becomes a dependable long-term public distribution channel.
 
-- adaptive daily workout generation
-- a hard 25-minute workout budget
+## The training contract
+
+- **Capability first.** Working strength, longevity, mobility/flexibility, conditioning, body control, balance, coordination, grip, power, locomotion, and durability support that objective.
+- **6 training days per week.** The app targets six sessions without turning the seventh day into a hidden workout.
+- **25 minutes means 25 minutes.** Preparation, training, conditioning, mobility, stretching, transitions, and logging all fit inside the cap.
+- **Working strength over gym numbers.** Grip, hanging, pulling, overhead strength, carries, awkward-load control, body control, and strength through useful ranges matter more than chasing isolated maxes.
+- **Progress is inferred from ordinary training.** The workout is the evidence; there are no required benchmark days.
+- **Recovery is inferred from results.** Pete's Reps adapts from demonstrated performance rather than mandatory sleep/soreness/readiness questionnaires.
+- **Failure is data, not the goal.** The program does not routinely chase muscular failure.
+- **Progression is hidden.** Handstand, grip, pull-up, pistol, L-sit, carry, rope-climb, and other progressions exist inside the engine; the user gets the next appropriate movement.
+- **Stretching is training.** Mobility and flexibility are first-class parts of the program.
+- **Complex engine, simple interface.** Internal scores and selection reasons remain invisible plumbing.
+
+See **[docs/CANON.md](docs/CANON.md)** for the non-negotiable project rules.
+
+## Current v0 engine
+
+The current implementation now includes:
+
+- rolling exposure-based session generation instead of a fixed seven-day body-part split
+- four blocks totaling 23 planned minutes, leaving transition/logging slack under the 25-minute ceiling
+- a mobility/stretching block in every v0 session
+- performance-based challenge progression
+- inferred readiness from material performance degradation
+- hidden capability and long-term-goal metadata
+- structured exercise variety with recent-repeat avoidance
+- pull-up bar, kettlebell, and medicine-ball movement support
+- handstand, grip, carry, L-sit, pistol, rope-climb-support, crawling, mobility, and conditioning movements
+- full-session overview before training
+- focused one-movement-at-a-time execution with the overview always available
 - persistent local workout history
-- 56-day cycles with indefinite rollover
-- a varied starter exercise library
-- performance-based progression
-- exercise instructions / movement cues
-- unit tests for progression, cycle rollover, and the 25-minute ceiling
-- GitHub Actions CI that tests the project and produces a debug APK
+- unit tests for the time ceiling, six-session rhythm, mobility exposure, progression, readiness adjustment, and capability links
+- GitHub Actions CI that tests the app and builds a downloadable debug APK
 
-Expect the interface, exercise library, progression rules, and data model to evolve.
+The implementation-facing design is documented in **[docs/V0_ENGINE_SPEC.md](docs/V0_ENGINE_SPEC.md)**.
 
-## Android support
+## Core equipment
 
-Pete's Reps is being developed **Android-first**.
+Pete's Reps assumes a deliberately small kit:
 
-Current build configuration:
+- pull-up bar
+- kettlebell
+- medicine ball
+
+Conventional weights can be used opportunistically later, but they are not required and are not the organizing goal of the program.
+
+## Android / build
+
+Current project configuration:
 
 - Kotlin / Jetpack Compose
-- Android Gradle Plugin 9.3.0
-- Kotlin / Compose compiler plugin 2.4.10
-- Compose BOM 2026.08.00
-- `compileSdk 37` — Android 17
+- `compileSdk 37`
 - `targetSdk 36`
 - `minSdk 26`
-- JDK 17 / Gradle 9.5.0
-- SQLite for durable local history
+- JDK 17
+- Gradle 9.5.0 in CI
+- local SQLite training history
 
-Android 17 is API level 37. Pete's Reps currently compiles with the Android 17 SDK while targeting API 36, so Android 17 can run the app while we continue validating Android-17-specific behavior before moving the target SDK to 37.
-
-# Installing Pete's Reps on Android 17
-
-Pete's Reps is not currently distributed through Google Play. Installation is therefore a **sideload** from a Pete's Reps APK built by this repository.
-
-## Easiest method — install a GitHub-built APK
-
-1. On the Android 17 device, open this GitHub repository.
-2. Open the **Actions** tab.
-3. Open the most recent successful **Android CI** run — look for the green check mark.
-4. Scroll to **Artifacts** and download `petes-reps-debug-apk`.
-5. The artifact downloads as a ZIP file. Open or extract it with Files or another file manager.
-6. Inside the ZIP, locate `app-debug.apk`.
-7. Tap `app-debug.apk`.
-8. Android may tell you that the browser or file manager is not currently allowed to install unknown apps. Allow installs **for that source only** when prompted. If Android does not offer the prompt directly, search Android Settings for **Install unknown apps**, select the app you are using to open the APK (for example Chrome or Files), and allow that source.
-9. Return to the APK and tap **Install**.
-10. When installation completes, open **Pete's Reps** from the launcher.
-
-Android / Google Play Protect may scan or warn about a sideloaded APK. That is expected for software installed outside Google Play. Only install an APK that you intentionally obtained from this repository or a Pete's Reps release that you trust.
-
-## Android 17: "unverified developer" message
-
-Newer Android security controls can separately block apps from an **unverified developer**. This is different from the ordinary "install unknown apps" permission above and is being rolled out progressively.
-
-If Android specifically says the app cannot be installed because the developer is unverified, and you intentionally want to install this personal build:
-
-1. Enable Android **Developer options** if they are not already enabled.
-2. Open **Settings → System → Developer options**.
-3. Turn on **Allow apps from unverified developers**.
-4. Follow Android's security flow. Google currently documents a **24-hour security delay** before this bypass becomes available.
-5. After the delay and confirmation flow, retry the APK and choose **Install anyway** when Android presents that option.
-
-Do **not** disable this protection merely because a website, caller, text message, or stranger tells you to install an APK. This exception is intended for a build you personally know and trust.
-
-> Note: Android Advanced Protection can block installation from unknown sources entirely. If Advanced Protection is enabled, normal sideloading may not be available.
-
-## Installing with ADB instead
-
-Developers can install the APK from a computer with Android Platform Tools:
-
-1. Enable **Developer options** on the Android device.
-2. Enable **USB debugging**.
-3. Connect the phone to the computer and approve the debugging prompt on the phone.
-4. Download and extract the Pete's Reps APK artifact.
-5. From the directory containing the APK, run:
-
-```bash
-adb install app-debug.apk
-```
-
-For an update over an existing build, normally use:
-
-```bash
-adb install -r app-debug.apk
-```
-
-### Early-build signing warning
-
-Current CI artifacts are **debug builds**. Different debug builds can occasionally be signed with a different debug key, in which case Android will refuse to install the new APK over the existing copy. If Android reports a signature / package conflict, uninstalling the old copy will allow the new one to install — **but uninstalling also removes the app's local training database**.
-
-Do not rely on uninstall/reinstall as an update strategy once you have meaningful training history. Stable release signing plus export/restore of training history are therefore important roadmap items before Pete's Reps becomes a long-term daily driver.
-
-## Building the APK yourself
-
-The repository CI installs the Android SDK and Gradle 9.5.0, runs the unit tests, and builds a debug APK.
-
-Locally, open the project in a current Android Studio release that supports the Android 17 SDK, or build with Gradle 9.5.0 and JDK 17:
+Build and test from the repository root:
 
 ```bash
 gradle :app:testDebugUnitTest :app:assembleDebug
 ```
 
-The APK is written to:
+APK output:
 
 ```text
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## Updating Pete's Reps
+## Architecture
 
-For now, updates are manual:
+The project intentionally remains small while the training engine is being proven:
 
-1. Obtain a newer Pete's Reps APK from a successful GitHub build or future GitHub Release.
-2. Install it over the existing app.
-3. Android should retain the local training database when the package and signing key match.
+```text
+app/src/main/java/org/petesreps/
+├── data/
+│   ├── ExerciseCatalog.kt
+│   └── TrainingDatabase.kt
+├── engine/
+│   ├── CapabilityGraph.kt
+│   └── WorkoutEngine.kt
+├── model/
+│   └── Models.kt
+└── ui/
+    └── PetesRepsScreen.kt
+```
 
-A future release process should provide consistently signed APKs so normal upgrades preserve training history reliably.
-
-## Safety
-
-Pete's Reps is training software, not medical care. Exercise within your ability, use a securely installed pull-up bar, and stop a movement that causes sharp pain, dizziness, or other concerning symptoms.
+A future refactor may move the engine/data/model layers into separate Gradle modules and migrate persistence to Room. Those are engineering improvements, not reasons to delay validating the adaptive training behavior.
 
 ## Privacy
 
-Pete's Reps is designed to work locally. The core app does not require an account, analytics service, subscription, or cloud connection. Workout history lives on the device.
+Pete's Reps is designed to work locally. The core training flow does not require an account, analytics service, advertising service, subscription, or permanent network connection. Workout history lives on the device.
+
+## Safety
+
+Pete's Reps is training software, not medical care. Use securely installed equipment and appropriate movement space. Stop a movement that causes sharp pain, dizziness, or another concerning symptom.
 
 ## License
 
