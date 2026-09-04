@@ -55,8 +55,12 @@ class TrainingDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
             dayNumber = intState(db, "current_day", 1),
             challengeByFamily = families.associateWith { intState(db, "challenge_${it.name}", 0) },
             successStreakByFamily = families.associateWith { intState(db, "success_${it.name}", 0) },
-            failureStreakByFamily = families.associateWith { intState(db, "failure_${it.name}", 0) },
+            underperformanceStreakByFamily = families.associateWith {
+                // Preserve any early-build state that used the old failure_* key name.
+                intState(db, "under_${it.name}", intState(db, "failure_${it.name}", 0))
+            },
             lastExerciseByFamily = families.associateWith { stringState(db, "last_${it.name}") },
+            lastTrainedDayByFamily = families.associateWith { intState(db, "last_trained_${it.name}", 0) },
         )
     }
 
@@ -79,6 +83,8 @@ class TrainingDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         try {
             val workoutId = db.insertOrThrow("workouts", null, ContentValues().apply {
                 put("day_number", workout.dayNumber)
+                // Column names are retained for database compatibility. They now store the
+                // rolling six-session training week and session number.
                 put("cycle_number", workout.cycleNumber)
                 put("cycle_day", workout.cycleDay)
                 put("focus", workout.focus)
@@ -92,31 +98,33 @@ class TrainingDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
                 val prescribed = prescription.totalTarget.coerceAtLeast(1)
                 val challengeKey = "challenge_${family.name}"
                 val successKey = "success_${family.name}"
-                val failureKey = "failure_${family.name}"
+                val underKey = "under_${family.name}"
                 var challenge = intState(db, challengeKey, 0)
                 var success = intState(db, successKey, 0)
-                var failure = intState(db, failureKey, 0)
+                var underperformance = intState(db, underKey, intState(db, "failure_${family.name}", 0))
 
                 when {
                     actual >= prescribed -> {
                         success += 1
-                        failure = 0
+                        underperformance = 0
                         if (success >= 3) {
                             challenge += 1
                             success = 0
                         }
                     }
                     actual * 10 < prescribed * 7 -> {
-                        failure += 1
+                        // This is a material performance drop, not a badge-worthy "failure".
+                        // Repeated drops reduce challenge and create a readiness penalty.
+                        underperformance += 1
                         success = 0
-                        if (failure >= 2) {
+                        if (underperformance >= 2) {
                             challenge = (challenge - 1).coerceAtLeast(0)
-                            failure = 0
+                            underperformance = 0
                         }
                     }
                     else -> {
                         success = 0
-                        failure = 0
+                        underperformance = 0
                     }
                 }
 
@@ -133,8 +141,9 @@ class TrainingDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
 
                 putState(db, challengeKey, challenge.toString())
                 putState(db, successKey, success.toString())
-                putState(db, failureKey, failure.toString())
+                putState(db, underKey, underperformance.toString())
                 putState(db, "last_${family.name}", prescription.exercise.id)
+                putState(db, "last_trained_${family.name}", workout.dayNumber.toString())
             }
 
             putState(db, "current_day", (workout.dayNumber + 1).toString())
