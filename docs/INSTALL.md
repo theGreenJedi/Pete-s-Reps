@@ -2,7 +2,9 @@
 
 Pete's Reps is currently an early Android build distributed from this GitHub repository. It does not require a Pete's Reps account, subscription, analytics service, or cloud connection to run.
 
-## Fastest path: download the GitHub-built APK
+## Fastest current path: download the GitHub-built APK
+
+Until the first durable signed GitHub Release is published:
 
 1. Open the Pete's Reps repository on GitHub.
 2. Open **Actions**.
@@ -14,7 +16,13 @@ Pete's Reps is currently an early Android build distributed from this GitHub rep
 8. Confirm **Install**.
 9. Open **Pete's Reps** from the launcher.
 
-The GitHub Actions artifact is the current repository download path. It is a debug build and is intended for development/testing rather than polished public distribution.
+The GitHub Actions artifact is currently the authoritative repository download path. It is a debug build intended for development/testing.
+
+## Signed GitHub Releases
+
+The repository now contains a production release workflow, documented in **[RELEASE.md](RELEASE.md)**. Once the durable release signing key has been provisioned into GitHub Actions secrets, signed releases will become the preferred download/update path.
+
+A release APK is not considered valid merely because a file is named "release." The workflow must verify the durable Android signature before publishing it.
 
 ## Powering up for the first time
 
@@ -44,7 +52,7 @@ Pete's Reps currently assumes access to:
 
 Conventional dumbbells, barbells, plates, or other weights may be useful later but are not required by the core design.
 
-## Build the APK yourself
+## Build the debug APK yourself
 
 The repository CI runs the unit tests and assembles the debug APK.
 
@@ -87,12 +95,12 @@ Current CI artifacts are debug builds. Debug signing can differ between build en
 Therefore:
 
 - do not treat uninstall/reinstall as a normal update strategy once the device contains meaningful training history
-- stable release signing is a required milestone before Pete's Reps becomes a dependable long-term daily-driver install
-- export/restore of training history is also a planned durability feature
+- use consistently signed release APKs for the long-term daily-driver channel once available
+- verify every new release can install over the previous signed release without uninstalling
+- verify local workout history survives that upgrade
+- export/restore of training history remains a planned additional durability feature
 
-## GitHub Releases
-
-The intended public-download end state is a consistently signed APK attached to a GitHub Release, with the README linking directly to the latest release. Until stable signing is configured, the repository's successful Android CI artifact remains the authoritative downloadable build.
+The release signing procedure includes this upgrade-preservation test as an explicit acceptance gate.
 
 ## Privacy / network behavior
 

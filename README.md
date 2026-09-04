@@ -20,7 +20,22 @@ Pete's Reps is currently an early experimental Android build.
 
 Full step-by-step instructions, ADB installation, updating cautions, and first-run behavior are in **[docs/INSTALL.md](docs/INSTALL.md)**.
 
-> The current repository artifact is a debug APK. Stable release signing and direct GitHub Release downloads are required before this becomes a dependable long-term public distribution channel.
+> The current downloadable build is still a debug APK. The repository now contains the stable signing/GitHub Release pipeline, but the durable private signing key must be provisioned into GitHub Actions secrets before the first update-safe release can be published.
+
+## Release distribution status
+
+The production release path is documented in **[docs/RELEASE.md](docs/RELEASE.md)** and implemented by **`.github/workflows/release.yml`**.
+
+Once the signing secrets are installed, a matching `v*` tag will:
+
+- verify that the tag matches the Android `versionName`
+- run tests and build the release APK
+- sign it with the durable Pete's Reps release key
+- verify the APK signature with Android `apksigner`
+- generate a SHA-256 checksum
+- publish the signed APK and checksum to GitHub Releases
+
+The private keystore is intentionally excluded from source control.
 
 ## The training contract
 
@@ -55,6 +70,7 @@ The current implementation now includes:
 - persistent local workout history
 - unit tests for the time ceiling, six-session rhythm, mobility exposure, progression, readiness adjustment, and capability links
 - GitHub Actions CI that tests the app and builds a downloadable debug APK
+- a tag-driven signed-release pipeline awaiting durable signing-secret provisioning
 
 The implementation-facing design is documented in **[docs/V0_ENGINE_SPEC.md](docs/V0_ENGINE_SPEC.md)**.
 
@@ -91,6 +107,8 @@ APK output:
 ```text
 app/build/outputs/apk/debug/app-debug.apk
 ```
+
+The normal CI also smoke-tests `assembleRelease` without signing material; unsigned release outputs from that smoke test are never published.
 
 ## Architecture
 

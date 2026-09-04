@@ -1,0 +1,110 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: '15859902'
+          packages: platform-tools
+
+      - name: Install Android SDK
+        run: sdkmanager --channel=3 "platforms;android-37.0" "build-tools;36.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
+
+      - name: Verify tag matches app version
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_NAME="$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)"
+          test -n "$VERSION_NAME"
+          if [ "v${VERSION_NAME}" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match app version v${VERSION_NAME}." >&2
+            exit 1
+          fi
+
+      - name: Validate release signing secrets
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.PETES_REPS_RELEASE_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.PETES_REPS_RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.PETES_REPS_RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.PETES_REPS_RELEASE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo "Missing PETES_REPS_RELEASE_KEYSTORE_BASE64" >&2; exit 1; }
+          test -n "$STORE_PASSWORD" || { echo "Missing PETES_REPS_RELEASE_STORE_PASSWORD" >&2; exit 1; }
+          test -n "$KEY_ALIAS" || { echo "Missing PETES_REPS_RELEASE_KEY_ALIAS" >&2; exit 1; }
+          test -n "$KEY_PASSWORD" || { echo "Missing PETES_REPS_RELEASE_KEY_PASSWORD" >&2; exit 1; }
+
+      - name: Restore release keystore
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.PETES_REPS_RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/petes-reps-release.jks"
+          chmod 600 "$RUNNER_TEMP/petes-reps-release.jks"
+
+      - name: Test and build signed release
+        env:
+          PETES_REPS_RELEASE_STORE_FILE: ${{ runner.temp }}/petes-reps-release.jks
+          PETES_REPS_RELEASE_STORE_PASSWORD: ${{ secrets.PETES_REPS_RELEASE_STORE_PASSWORD }}
+          PETES_REPS_RELEASE_KEY_ALIAS: ${{ secrets.PETES_REPS_RELEASE_KEY_ALIAS }}
+          PETES_REPS_RELEASE_KEY_PASSWORD: ${{ secrets.PETES_REPS_RELEASE_KEY_PASSWORD }}
+        run: gradle :app:testDebugUnitTest :app:assembleRelease
+
+      - name: Verify signature and prepare release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          OUT="petes-reps-${GITHUB_REF_NAME}.apk"
+          cp "$APK" "$OUT"
+          sha256sum "$OUT" > "${OUT}.sha256"
+
+      - name: Upload signed release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: petes-reps-${{ github.ref_name }}-signed
+          path: |
+            petes-reps-${{ github.ref_name }}.apk
+            petes-reps-${{ github.ref_name }}.apk.sha256
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            "petes-reps-${GITHUB_REF_NAME}.apk" \
+            "petes-reps-${GITHUB_REF_NAME}.apk.sha256" \
+            --verify-tag \
+            --generate-notes \
+            --title "Pete's Reps ${GITHUB_REF_NAME#v}"
