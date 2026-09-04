@@ -41,6 +41,20 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
     var completionMessage by remember { mutableStateOf<String?>(null) }
     val actuals = remember(workout.dayNumber) { mutableMapOf<String, Int>() }
     var editVersion by remember(workout.dayNumber) { mutableIntStateOf(0) }
+    var started by rememberSaveable(workout.dayNumber) { mutableStateOf(false) }
+    var showOverview by rememberSaveable(workout.dayNumber) { mutableStateOf(false) }
+    var currentIndex by rememberSaveable(workout.dayNumber) { mutableIntStateOf(0) }
+
+    fun completeWorkout() {
+        val savedDay = workout.dayNumber
+        database.completeWorkout(workout, actuals.toMap())
+        summary = database.summary()
+        workout = engine.generate(database.profile())
+        completionMessage = "Session $savedDay saved."
+        started = false
+        showOverview = false
+        currentIndex = 0
+    }
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {
@@ -52,43 +66,122 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
                     Spacer(Modifier.height(12.dp))
                     Text("Pete's Reps", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        "Day ${workout.dayNumber} • Cycle ${workout.cycleNumber}, day ${workout.cycleDay} • ${workout.plannedMinutes} min",
+                        "Session ${workout.dayNumber} • ${workout.cycleDay} of 6 • ${workout.plannedMinutes} min",
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Text(workout.focus, style = MaterialTheme.typography.titleMedium)
                     completionMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
                 }
 
-                items(workout.prescriptions, key = { it.exercise.id }) { prescription ->
-                    val ignored = editVersion
-                    ExerciseCard(
-                        prescription = prescription,
-                        actual = actuals[prescription.exercise.id] ?: 0,
-                        onActualChange = { value ->
-                            actuals[prescription.exercise.id] = value.coerceAtLeast(0)
-                            editVersion += 1
-                        },
-                    )
+                if (!started || showOverview) {
+                    item {
+                        Text(
+                            if (started) "Session overview" else "Today's session",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    items(workout.prescriptions, key = { "overview_${it.exercise.id}" }) { prescription ->
+                        OverviewCard(prescription)
+                    }
+                    item {
+                        if (started) {
+                            Button(
+                                onClick = { showOverview = false },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text("Return to current movement")
+                            }
+                        } else {
+                            Button(
+                                onClick = {
+                                    started = true
+                                    showOverview = false
+                                    currentIndex = 0
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text("Start session")
+                            }
+                        }
+                    }
+                } else {
+                    val prescription = workout.prescriptions[currentIndex]
+                    item {
+                        val ignored = editVersion
+                        Text(
+                            "Movement ${currentIndex + 1} of ${workout.prescriptions.size}",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        ExerciseCard(
+                            prescription = prescription,
+                            actual = actuals[prescription.exercise.id] ?: 0,
+                            onActualChange = { value ->
+                                actuals[prescription.exercise.id] = value.coerceAtLeast(0)
+                                editVersion += 1
+                            },
+                        )
+                    }
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            if (currentIndex > 0) {
+                                OutlinedButton(
+                                    onClick = { currentIndex -= 1 },
+                                    modifier = Modifier.weight(1f),
+                                ) { Text("Previous") }
+                            }
+                            if (currentIndex < workout.prescriptions.lastIndex) {
+                                Button(
+                                    onClick = { currentIndex += 1 },
+                                    modifier = Modifier.weight(1f),
+                                ) { Text("Next") }
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = { showOverview = true },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("View full session")
+                        }
+                        if (currentIndex == workout.prescriptions.lastIndex) {
+                            Button(
+                                onClick = ::completeWorkout,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text("Complete session")
+                            }
+                        }
+                    }
                 }
 
                 item {
                     HorizontalDivider()
-                    Button(
-                        onClick = {
-                            val savedDay = workout.dayNumber
-                            database.completeWorkout(workout, actuals.toMap())
-                            summary = database.summary()
-                            workout = engine.generate(database.profile())
-                            completionMessage = "Day $savedDay saved."
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Complete today's workout")
-                    }
-                    Spacer(Modifier.height(8.dp))
                     Summary(summary)
                     Spacer(Modifier.height(24.dp))
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OverviewCard(prescription: ExercisePrescription) {
+    val unit = if (prescription.exercise.unit == MeasureUnit.REPS) "reps" else "sec"
+    val side = if (prescription.exercise.perSide) " / side" else ""
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(prescription.exercise.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("${prescription.sets} × ${prescription.targetPerSet} $unit$side • ${prescription.blockMinutes} min")
+            if (prescription.exercise.equipment.isNotEmpty()) {
+                Text(
+                    prescription.exercise.equipment.joinToString(" • ") {
+                        it.name.lowercase().replace('_', ' ').replaceFirstChar(Char::uppercase)
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
     }
@@ -107,10 +200,17 @@ private fun ExerciseCard(
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(prescription.exercise.family.name.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelMedium)
             Text(prescription.exercise.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
             Text("${prescription.sets} × ${prescription.targetPerSet} $unit$side • ${prescription.blockMinutes}-minute block")
             prescription.challengeNote?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            if (prescription.exercise.equipment.isNotEmpty()) {
+                Text(
+                    "Equipment: " + prescription.exercise.equipment.joinToString(", ") {
+                        it.name.lowercase().replace('_', ' ')
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { onActualChange((actual - increment).coerceAtLeast(0)) }) { Text("−") }
@@ -135,12 +235,6 @@ private fun ExerciseCard(
 
 @Composable
 private fun Summary(summary: TrainingSummary) {
-    Text("Tracking", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-    Text("${summary.workoutsLogged} workouts logged • next day ${summary.currentDay}")
-    Text(
-        summary.challengeByFamily.entries.joinToString("  ") { (family, challenge) ->
-            "${family.name.take(3)} $challenge"
-        },
-        style = MaterialTheme.typography.bodySmall,
-    )
+    Text("Training history", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+    Text("${summary.workoutsLogged} sessions logged • next session ${summary.currentDay}")
 }
