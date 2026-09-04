@@ -3,6 +3,17 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val releaseStoreFile = providers.environmentVariable("PETES_REPS_RELEASE_STORE_FILE").orNull
+val releaseStorePassword = providers.environmentVariable("PETES_REPS_RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("PETES_REPS_RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("PETES_REPS_RELEASE_KEY_PASSWORD").orNull
+val hasReleaseSigning = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword,
+).all { !it.isNullOrBlank() }
+
 android {
     namespace = "org.petesreps"
     compileSdk = 37
@@ -13,6 +24,24 @@ android {
         targetSdk = 36
         versionCode = 2
         versionName = "0.2.0"
+    }
+
+    val releaseSigningConfig = if (hasReleaseSigning) {
+        signingConfigs.create("release") {
+            storeFile = file(releaseStoreFile!!)
+            storePassword = releaseStorePassword
+            keyAlias = releaseKeyAlias
+            keyPassword = releaseKeyPassword
+        }
+    } else {
+        null
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = releaseSigningConfig
+        }
     }
 
     buildFeatures {
