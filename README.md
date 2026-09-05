@@ -22,6 +22,23 @@ Full step-by-step instructions, ADB installation, updating cautions, and first-r
 
 > The current downloadable build is still a debug APK. The repository now contains the stable signing/GitHub Release pipeline, but the durable private signing key must be provisioned into GitHub Actions secrets before the first update-safe release can be published.
 
+## One-tap substitute
+
+Pete's Reps 0.5.0 adds **Swap** to the session overview and current-movement screen.
+
+If today's movement is not workable, tap **Swap** once. Pete's Reps quietly chooses another movement using the hidden capability graph.
+
+- no reason questionnaire
+- no exposed substitution score
+- intended capability stimulus is preserved
+- the actual replacement movement is what gets recorded
+- the 25:00 master clock never resets
+- a running movement timer also does not reset
+- repeated swaps avoid movements already rejected in that block during the running app session
+- active replacements survive Android activity/process recreation
+
+See **[docs/SUBSTITUTION.md](docs/SUBSTITUTION.md)** for the substitution contract.
+
 ## Time is law
 
 Pete's Reps 0.4.0 enforces the 25-minute contract in the running app.
@@ -32,7 +49,7 @@ Pete's Reps 0.4.0 enforces the 25-minute contract in the running app.
 - an expired movement timer says **MOVE ON**
 - at **00:00** the session stops automatically and saves objective results already entered
 - unentered movements at a hard stop are treated as unattempted rather than fake zero-rep failures
-- the active clock, current movement, and entered results are checkpointed locally while training
+- the active clock, current movement, entered results, and any active movement substitutions are checkpointed locally while training
 
 See **[docs/TIMING.md](docs/TIMING.md)** for the timing contract.
 
@@ -66,6 +83,7 @@ The private keystore is intentionally excluded from source control.
 - **Capability first.** Working strength, longevity, mobility/flexibility, conditioning, body control, balance, coordination, grip, power, locomotion, and durability support that objective.
 - **6 training days per week.** The app targets six sessions without turning the seventh day into a hidden workout.
 - **25 minutes means 25 minutes.** Preparation, training, conditioning, mobility, stretching, transitions, and logging all fit inside the cap; the live master clock hard-stops the session at 00:00.
+- **One-tap substitute.** If a movement is not workable, Swap quietly chooses another movement while preserving the intended training stimulus and remaining time.
 - **Working strength over gym numbers.** Grip, hanging, pulling, overhead strength, carries, awkward-load control, body control, and strength through useful ranges matter more than chasing isolated maxes.
 - **Progress is inferred from ordinary training.** The workout is the evidence; there are no required benchmark days.
 - **Recovery is inferred from results.** Pete's Reps adapts from demonstrated performance rather than mandatory sleep/soreness/readiness questionnaires.
@@ -85,6 +103,8 @@ The current implementation now includes:
 - a live 25:00 master clock with automatic hard stop
 - subordinate current-movement timers for pacing
 - in-progress session checkpoint/resume state based on monotonic elapsed time
+- one-tap capability-preserving movement substitution with exact active-prescription resume
+- a hidden intended-stimulus field so cross-family swaps do not corrupt progression
 - a mobility/stretching block in every v0 session
 - performance-based challenge progression
 - inferred readiness from material performance degradation
@@ -96,7 +116,7 @@ The current implementation now includes:
 - focused one-movement-at-a-time execution with the overview always available
 - persistent local workout history
 - full local training-history export/restore with a versioned app-owned backup format
-- JVM unit tests for timing, time ceiling, six-session rhythm, mobility exposure, progression, readiness adjustment, capability links, and backup codec
+- JVM unit tests for timing, substitutions, time ceiling, six-session rhythm, mobility exposure, progression, readiness adjustment, capability links, and backup codec
 - Compose instrumentation tests for visible timer states, compiled by CI
 - GitHub Actions CI that tests the app and builds a downloadable debug APK
 - a tag-driven signed-release pipeline awaiting durable signing-secret provisioning
@@ -151,6 +171,7 @@ app/src/main/java/org/petesreps/
 │   └── TrainingDatabase.kt
 ├── engine/
 │   ├── CapabilityGraph.kt
+│   ├── SubstitutionEngine.kt
 │   └── WorkoutEngine.kt
 ├── model/
 │   └── Models.kt
