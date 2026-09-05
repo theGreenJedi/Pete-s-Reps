@@ -16,15 +16,29 @@ Pete's Reps is currently an early experimental Android build.
 2. Open the newest successful **Android CI** run on `main`.
 3. Download the **`petes-reps-debug-apk`** artifact.
 4. Extract the ZIP and install **`app-debug.apk`** on the Android device.
-5. Open Pete's Reps, review the complete session, tap **Start session**, and train.
+5. Open Pete's Reps, review the complete session, tap **Start 25:00 session**, and train.
 
 Full step-by-step instructions, ADB installation, updating cautions, and first-run behavior are in **[docs/INSTALL.md](docs/INSTALL.md)**.
 
 > The current downloadable build is still a debug APK. The repository now contains the stable signing/GitHub Release pipeline, but the durable private signing key must be provisioned into GitHub Actions secrets before the first update-safe release can be published.
 
+## Time is law
+
+Pete's Reps 0.4.0 enforces the 25-minute contract in the running app.
+
+- one master **25:00** clock starts with the session and never resets between movements
+- backgrounding, screen sleep, rotation, and ordinary process recreation do not grant extra workout time
+- each current movement has a subordinate pacing timer
+- an expired movement timer says **MOVE ON**
+- at **00:00** the session stops automatically and saves objective results already entered
+- unentered movements at a hard stop are treated as unattempted rather than fake zero-rep failures
+- the active clock, current movement, and entered results are checkpointed locally while training
+
+See **[docs/TIMING.md](docs/TIMING.md)** for the timing contract.
+
 ## Training-history durability
 
-Pete's Reps 0.3.0 adds **full training-history export and restore** from inside the app.
+Pete's Reps 0.3.0 added **full training-history export and restore** from inside the app.
 
 The backup includes completed sessions, objective performance history, and the hidden progression/readiness state needed to continue the engine rather than merely preserving a workout log.
 
@@ -51,7 +65,7 @@ The private keystore is intentionally excluded from source control.
 
 - **Capability first.** Working strength, longevity, mobility/flexibility, conditioning, body control, balance, coordination, grip, power, locomotion, and durability support that objective.
 - **6 training days per week.** The app targets six sessions without turning the seventh day into a hidden workout.
-- **25 minutes means 25 minutes.** Preparation, training, conditioning, mobility, stretching, transitions, and logging all fit inside the cap.
+- **25 minutes means 25 minutes.** Preparation, training, conditioning, mobility, stretching, transitions, and logging all fit inside the cap; the live master clock hard-stops the session at 00:00.
 - **Working strength over gym numbers.** Grip, hanging, pulling, overhead strength, carries, awkward-load control, body control, and strength through useful ranges matter more than chasing isolated maxes.
 - **Progress is inferred from ordinary training.** The workout is the evidence; there are no required benchmark days.
 - **Recovery is inferred from results.** Pete's Reps adapts from demonstrated performance rather than mandatory sleep/soreness/readiness questionnaires.
@@ -68,6 +82,9 @@ The current implementation now includes:
 
 - rolling exposure-based session generation instead of a fixed seven-day body-part split
 - four blocks totaling 23 planned minutes, leaving transition/logging slack under the 25-minute ceiling
+- a live 25:00 master clock with automatic hard stop
+- subordinate current-movement timers for pacing
+- in-progress session checkpoint/resume state based on monotonic elapsed time
 - a mobility/stretching block in every v0 session
 - performance-based challenge progression
 - inferred readiness from material performance degradation
@@ -79,7 +96,8 @@ The current implementation now includes:
 - focused one-movement-at-a-time execution with the overview always available
 - persistent local workout history
 - full local training-history export/restore with a versioned app-owned backup format
-- unit tests for the time ceiling, six-session rhythm, mobility exposure, progression, readiness adjustment, capability links, and backup codec
+- JVM unit tests for timing, time ceiling, six-session rhythm, mobility exposure, progression, readiness adjustment, capability links, and backup codec
+- Compose instrumentation tests for visible timer states, compiled by CI
 - GitHub Actions CI that tests the app and builds a downloadable debug APK
 - a tag-driven signed-release pipeline awaiting durable signing-secret provisioning
 
@@ -110,7 +128,7 @@ Current project configuration:
 Build and test from the repository root:
 
 ```bash
-gradle :app:testDebugUnitTest :app:assembleDebug
+gradle :app:testDebugUnitTest :app:assembleDebugAndroidTest :app:assembleDebug
 ```
 
 APK output:
@@ -136,6 +154,9 @@ app/src/main/java/org/petesreps/
 │   └── WorkoutEngine.kt
 ├── model/
 │   └── Models.kt
+├── session/
+│   ├── SessionRunStore.kt
+│   └── SessionTiming.kt
 └── ui/
     └── PetesRepsScreen.kt
 ```
