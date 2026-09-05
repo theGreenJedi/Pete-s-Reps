@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -41,10 +41,13 @@ import kotlinx.coroutines.delay
 import org.petesreps.data.TrainingBackup
 import org.petesreps.data.TrainingBackupCodec
 import org.petesreps.data.TrainingDatabase
+import org.petesreps.engine.SubstitutionEngine
 import org.petesreps.engine.WorkoutEngine
 import org.petesreps.model.ExercisePrescription
 import org.petesreps.model.MeasureUnit
 import org.petesreps.model.TrainingSummary
+import org.petesreps.model.Workout
+import org.petesreps.session.ActivePrescriptionState
 import org.petesreps.session.ActiveSessionRun
 import org.petesreps.session.SessionRunStore
 import org.petesreps.session.SessionTiming
@@ -53,14 +56,22 @@ import org.petesreps.session.SessionTiming
 fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
     val context = LocalContext.current
     val runStore = remember { SessionRunStore(context.applicationContext) }
+    val substitutionEngine = remember { SubstitutionEngine() }
     var historyRevision by remember { mutableIntStateOf(0) }
-    var workout by remember(historyRevision) { mutableStateOf(engine.generate(database.profile())) }
+    var workout by remember(historyRevision) {
+        val generated = engine.generate(database.profile())
+        val savedRun = runStore.load(generated.dayNumber)
+        mutableStateOf(restoreActiveWorkout(generated, savedRun, substitutionEngine))
+    }
     var summary by remember(historyRevision) { mutableStateOf(database.summary()) }
     var completionMessage by remember { mutableStateOf<String?>(null) }
     var pendingRestore by remember { mutableStateOf<TrainingBackup?>(null) }
     val restoredRun = remember(workout.dayNumber, historyRevision) { runStore.load(workout.dayNumber) }
     val actuals = remember(workout.dayNumber, historyRevision) {
         mutableStateMapOf<String, Int>().apply { putAll(restoredRun?.actuals.orEmpty()) }
+    }
+    val rejectedByBlock = remember(workout.dayNumber, historyRevision) {
+        mutableStateMapOf<Int, Set<String>>()
     }
     var started by rememberSaveable(workout.dayNumber, historyRevision) {
         mutableStateOf(restoredRun != null)
@@ -116,7 +127,18 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
         }
     }
 
-    fun checkpointRun() {
+    fun prescriptionStates(prescriptions: List<ExercisePrescription>): List<ActivePrescriptionState> =
+        prescriptions.map { prescription ->
+            ActivePrescriptionState(
+                exerciseId = prescription.exercise.id,
+                sets = prescription.sets,
+                targetPerSet = prescription.targetPerSet,
+                blockMinutes = prescription.blockMinutes,
+                stimulusFamilyName = prescription.stimulusFamily.name,
+            )
+        }
+
+    fun saveRun(prescriptions: List<ExercisePrescription> = workout.prescriptions) {
         if (!started || sessionStartedElapsedMillis <= 0L) return
         runStore.save(
             ActiveSessionRun(
@@ -125,15 +147,13 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
                 blockStartedElapsedMillis = blockStartedElapsedMillis,
                 currentIndex = currentIndex,
                 actuals = actuals.toMap(),
+                prescriptions = prescriptionStates(prescriptions),
             )
         )
     }
 
     fun completeWorkout(hardStop: Boolean = false) {
         val savedDay = workout.dayNumber
-        // At the hard stop, movements with no entered result are treated as
-        // unattempted rather than fake zero-rep failures. Actual zero remains
-        // recordable because touching the control creates an explicit map entry.
         val workoutToSave = if (hardStop) {
             workout.copy(
                 prescriptions = workout.prescriptions.filter { actuals.containsKey(it.exercise.id) }
@@ -161,7 +181,28 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
         currentIndex = index.coerceIn(0, workout.prescriptions.lastIndex.coerceAtLeast(0))
         blockStartedElapsedMillis = SystemClock.elapsedRealtime()
         nowElapsedMillis = blockStartedElapsedMillis
-        checkpointRun()
+        saveRun()
+    }
+
+    fun swapAt(index: Int) {
+        if (index !in workout.prescriptions.indices) return
+        val current = workout.prescriptions[index]
+        val alreadyRejected = rejectedByBlock[index].orEmpty()
+        val avoid = workout.prescriptions.map { it.exercise.id }.toSet() + alreadyRejected
+        val replacement = substitutionEngine.substitute(
+            current = current,
+            avoidExerciseIds = avoid - current.exercise.id,
+        )
+        if (replacement == null) {
+            completionMessage = "No useful substitute is available for this movement."
+            return
+        }
+
+        actuals.remove(current.exercise.id)
+        rejectedByBlock[index] = alreadyRejected + current.exercise.id
+        val replacements = workout.prescriptions.toMutableList().apply { set(index, replacement) }
+        workout = workout.copy(prescriptions = replacements)
+        saveRun(replacements)
     }
 
     LaunchedEffect(started, sessionStartedElapsedMillis, workout.dayNumber) {
@@ -246,8 +287,14 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
                             fontWeight = FontWeight.SemiBold,
                         )
                     }
-                    items(workout.prescriptions, key = { "overview_${it.exercise.id}" }) { prescription ->
-                        OverviewCard(prescription)
+                    itemsIndexed(
+                        items = workout.prescriptions,
+                        key = { index, prescription -> "overview_${index}_${prescription.exercise.id}" },
+                    ) { index, prescription ->
+                        OverviewCard(
+                            prescription = prescription,
+                            onSwap = { swapAt(index) },
+                        )
                     }
                     item {
                         if (started) {
@@ -275,6 +322,7 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
                                             blockStartedElapsedMillis = now,
                                             currentIndex = 0,
                                             actuals = emptyMap(),
+                                            prescriptions = prescriptionStates(workout.prescriptions),
                                         )
                                     )
                                 },
@@ -304,8 +352,9 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
                             actual = actuals[prescription.exercise.id] ?: 0,
                             onActualChange = { value ->
                                 actuals[prescription.exercise.id] = value.coerceAtLeast(0)
-                                checkpointRun()
+                                saveRun()
                             },
+                            onSwap = { swapAt(currentIndex) },
                         )
                     }
                     item {
@@ -372,6 +421,28 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
     }
 }
 
+private fun restoreActiveWorkout(
+    generated: Workout,
+    run: ActiveSessionRun?,
+    substitutionEngine: SubstitutionEngine,
+): Workout {
+    if (run == null || run.prescriptions.size != generated.prescriptions.size) return generated
+    val restored = generated.prescriptions.mapIndexed { index, fallback ->
+        val state = run.prescriptions[index]
+        substitutionEngine.restore(
+            exerciseId = state.exerciseId,
+            sets = state.sets,
+            targetPerSet = state.targetPerSet,
+            blockMinutes = state.blockMinutes,
+            stimulusFamilyName = state.stimulusFamilyName,
+        ) ?: fallback
+    }
+    return generated.copy(
+        prescriptions = restored,
+        plannedMinutes = restored.sumOf { it.blockMinutes }.coerceAtMost(25),
+    )
+}
+
 @Composable
 fun SessionClockBanner(remainingMillis: Long) {
     Card(modifier = Modifier.fillMaxWidth().testTag("session-clock")) {
@@ -402,11 +473,14 @@ fun BlockClockBanner(remainingMillis: Long) {
 }
 
 @Composable
-private fun OverviewCard(prescription: ExercisePrescription) {
+private fun OverviewCard(
+    prescription: ExercisePrescription,
+    onSwap: () -> Unit,
+) {
     val unit = if (prescription.exercise.unit == MeasureUnit.REPS) "reps" else "sec"
     val side = if (prescription.exercise.perSide) " / side" else ""
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(prescription.exercise.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Text("${prescription.sets} × ${prescription.targetPerSet} $unit$side • ${prescription.blockMinutes} min")
             if (prescription.exercise.equipment.isNotEmpty()) {
@@ -417,6 +491,12 @@ private fun OverviewCard(prescription: ExercisePrescription) {
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+            OutlinedButton(
+                onClick = onSwap,
+                modifier = Modifier.fillMaxWidth().testTag("swap-${prescription.exercise.id}"),
+            ) {
+                Text("Swap")
+            }
         }
     }
 }
@@ -426,6 +506,7 @@ private fun ExerciseCard(
     prescription: ExercisePrescription,
     actual: Int,
     onActualChange: (Int) -> Unit,
+    onSwap: () -> Unit,
 ) {
     var showCues by rememberSaveable(prescription.exercise.id) { mutableStateOf(false) }
     val unit = if (prescription.exercise.unit == MeasureUnit.REPS) "reps" else "sec"
@@ -453,6 +534,12 @@ private fun ExerciseCard(
             }
             OutlinedButton(onClick = { onActualChange(prescription.totalTarget) }) {
                 Text("Hit target (${prescription.totalTarget})")
+            }
+            OutlinedButton(
+                onClick = onSwap,
+                modifier = Modifier.fillMaxWidth().testTag("swap-current"),
+            ) {
+                Text("Swap")
             }
             OutlinedButton(onClick = { showCues = !showCues }) {
                 Text(if (showCues) "Hide how" else "How")
