@@ -22,6 +22,16 @@ Full step-by-step instructions, ADB installation, updating cautions, and first-r
 
 > The current downloadable build is still a debug APK. The repository now contains the stable signing/GitHub Release pipeline, but the durable private signing key must be provisioned into GitHub Actions secrets before the first update-safe release can be published.
 
+## Training-history durability
+
+Pete's Reps 0.3.0 adds **full training-history export and restore** from inside the app.
+
+The backup includes completed sessions, objective performance history, and the hidden progression/readiness state needed to continue the engine rather than merely preserving a workout log.
+
+Use **Export training backup** before any uninstall, phone replacement, debug-signing transition, or other operation that could remove the app's private local database. Restore validates the selected file first and then replaces local history atomically in one SQLite transaction.
+
+See **[docs/BACKUP.md](docs/BACKUP.md)** for the backup contract and recovery procedure.
+
 ## Release distribution status
 
 The production release path is documented in **[docs/RELEASE.md](docs/RELEASE.md)** and implemented by **`.github/workflows/release.yml`**.
@@ -68,7 +78,8 @@ The current implementation now includes:
 - full-session overview before training
 - focused one-movement-at-a-time execution with the overview always available
 - persistent local workout history
-- unit tests for the time ceiling, six-session rhythm, mobility exposure, progression, readiness adjustment, and capability links
+- full local training-history export/restore with a versioned app-owned backup format
+- unit tests for the time ceiling, six-session rhythm, mobility exposure, progression, readiness adjustment, capability links, and backup codec
 - GitHub Actions CI that tests the app and builds a downloadable debug APK
 - a tag-driven signed-release pipeline awaiting durable signing-secret provisioning
 
@@ -118,6 +129,7 @@ The project intentionally remains small while the training engine is being prove
 app/src/main/java/org/petesreps/
 ├── data/
 │   ├── ExerciseCatalog.kt
+│   ├── TrainingBackup.kt
 │   └── TrainingDatabase.kt
 ├── engine/
 │   ├── CapabilityGraph.kt
