@@ -32,18 +32,19 @@ On launch:
 
 1. Pete's Reps generates the next session from the local training profile.
 2. The first screen shows the complete session overview.
-3. Review the movements and equipment before starting.
+3. Review the movements and equipment before starting. If any movement is not workable today, tap **Swap** once; Pete's Reps substitutes another movement without asking why.
 4. Tap **Start 25:00 session**. The master session clock starts immediately.
 5. The app switches to one movement at a time and shows both the master time remaining and the current movement's pacing timer.
-6. Record the smallest objective result requested by the current build (reps or seconds).
-7. Use **Next** to continue. When a movement's pacing timer expires, the app says **MOVE ON**. **View full session** returns to the overview without pausing either clock.
-8. On the final movement, tap **Complete session** if you finish early.
-9. If the master clock reaches **00:00** first, Pete's Reps stops and saves the session automatically.
-10. Pete's Reps uses the recorded results when generating the next session.
+6. If the current movement becomes impractical, tap **Swap**. The replacement receives the time already remaining; neither clock restarts.
+7. Record the smallest objective result requested by the current build (reps or seconds).
+8. Use **Next** to continue. When a movement's pacing timer expires, the app says **MOVE ON**. **View full session** returns to the overview without pausing either clock.
+9. On the final movement, tap **Complete session** if you finish early.
+10. If the master clock reaches **00:00** first, Pete's Reps stops and saves the session automatically.
+11. Pete's Reps uses the recorded results when generating the next session.
 
-The 25-minute clock includes transitions, looking at the overview, logging results, mobility, and stretching. Backgrounding the app or turning off the screen does not pause the session. See **[TIMING.md](TIMING.md)** for the timing contract.
+The 25-minute clock includes transitions, looking at the overview, logging results, mobility, stretching, and time spent swapping a movement. Backgrounding the app or turning off the screen does not pause the session. See **[TIMING.md](TIMING.md)** for the timing contract and **[SUBSTITUTION.md](SUBSTITUTION.md)** for the Swap contract.
 
-The engine's progression, readiness, capability, and goal-selection logic is intentionally invisible during normal use.
+The engine's progression, readiness, capability, substitution scoring, and goal-selection logic are intentionally invisible during normal use.
 
 ## Protecting training history
 
