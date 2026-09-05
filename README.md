@@ -6,25 +6,30 @@ Open the app, see today's work, train for no more than **25 minutes total**, rec
 
 No account. No subscription. No social feed. No visible progression ladders. No benchmark-test days required.
 
-## Download & power up
+## Install Pete's Reps on an Android phone
 
-Pete's Reps is currently an early experimental Android build.
+You do **not** need Android Studio, ADB, Gradle, or a computer to install the current alpha.
 
-**Fastest current install path:**
+1. On your Android phone, sign in to GitHub and open this repository.
+2. Tap **Actions** near the top of the repository page.
+3. Open the newest **Android CI** run on `main` that has a green check mark.
+4. Scroll to **Artifacts** and tap **`petes-reps-debug-apk`**.
+5. GitHub downloads a ZIP file to the phone.
+6. Open the phone's **Files** app, find the ZIP in **Downloads**, and extract it.
+7. Open the extracted folder and tap **`app-debug.apk`**.
+8. If Android asks for permission to install apps from that browser or file manager, open **Settings**, allow that source, then return to the installer.
+9. Tap **Install**.
+10. Open **Pete's Reps** from the launcher.
 
-1. Open this repository's **Actions** tab.
-2. Open the newest successful **Android CI** run on `main`.
-3. Download the **`petes-reps-debug-apk`** artifact.
-4. Extract the ZIP and install **`app-debug.apk`** on the Android device.
-5. Open Pete's Reps, review the complete session, tap **Start 25:00 session**, and train.
+That is the normal alpha installation path. Full phone-first help, update cautions, and first-run guidance are in **[docs/INSTALL.md](docs/INSTALL.md)**.
 
-Full step-by-step instructions, ADB installation, updating cautions, and first-run behavior are in **[docs/INSTALL.md](docs/INSTALL.md)**.
+Developer build instructions have been separated into **[docs/DEVELOPING.md](docs/DEVELOPING.md)** so they do not get mixed up with ordinary installation.
 
-> The current downloadable build is still a debug APK. The repository now contains the stable signing/GitHub Release pipeline, but the durable private signing key must be provisioned into GitHub Actions secrets before the first update-safe release can be published.
+> The current downloadable build is still a debug APK. The repository contains the stable signing/GitHub Release pipeline, but the durable private signing key still has to be provisioned before the first update-safe release can be published.
 
 ## One-tap substitute
 
-Pete's Reps 0.5.0 adds **Swap** to the session overview and current-movement screen.
+Pete's Reps 0.5.0 added **Swap** to the session overview and current-movement screen.
 
 If today's movement is not workable, tap **Swap** once. Pete's Reps quietly chooses another movement using the hidden capability graph.
 
@@ -41,7 +46,7 @@ See **[docs/SUBSTITUTION.md](docs/SUBSTITUTION.md)** for the substitution contra
 
 ## Time is law
 
-Pete's Reps 0.4.0 enforces the 25-minute contract in the running app.
+Pete's Reps 0.4.0 made the 25-minute contract a runtime invariant.
 
 - one master **25:00** clock starts with the session and never resets between movements
 - backgrounding, screen sleep, rotation, and ordinary process recreation do not grant extra workout time
@@ -49,13 +54,13 @@ Pete's Reps 0.4.0 enforces the 25-minute contract in the running app.
 - an expired movement timer says **MOVE ON**
 - at **00:00** the session stops automatically and saves objective results already entered
 - unentered movements at a hard stop are treated as unattempted rather than fake zero-rep failures
-- the active clock, current movement, entered results, and any active movement substitutions are checkpointed locally while training
+- the active clock, current movement, entered results, and active substitutions are checkpointed locally while training
 
 See **[docs/TIMING.md](docs/TIMING.md)** for the timing contract.
 
 ## Training-history durability
 
-Pete's Reps 0.3.0 added **full training-history export and restore** from inside the app.
+Pete's Reps can export and restore the complete local training state.
 
 The backup includes completed sessions, objective performance history, and the hidden progression/readiness state needed to continue the engine rather than merely preserving a workout log.
 
@@ -96,7 +101,7 @@ See **[docs/CANON.md](docs/CANON.md)** for the non-negotiable project rules.
 
 ## Current v0 engine
 
-The current implementation now includes:
+The current implementation includes:
 
 - rolling exposure-based session generation instead of a fixed seven-day body-part split
 - four blocks totaling 23 planned minutes, leaving transition/logging slack under the 25-minute ceiling
@@ -105,7 +110,7 @@ The current implementation now includes:
 - in-progress session checkpoint/resume state based on monotonic elapsed time
 - one-tap capability-preserving movement substitution with exact active-prescription resume
 - a hidden intended-stimulus field so cross-family swaps do not corrupt progression
-- a mobility/stretching block in every v0 session
+- a mobility/stretching block in every session
 - performance-based challenge progression
 - inferred readiness from material performance degradation
 - hidden capability and long-term-goal metadata
@@ -133,31 +138,9 @@ Pete's Reps assumes a deliberately small kit:
 
 Conventional weights can be used opportunistically later, but they are not required and are not the organizing goal of the program.
 
-## Android / build
+## Android / development
 
-Current project configuration:
-
-- Kotlin / Jetpack Compose
-- `compileSdk 37`
-- `targetSdk 36`
-- `minSdk 26`
-- JDK 17
-- Gradle 9.5.0 in CI
-- local SQLite training history
-
-Build and test from the repository root:
-
-```bash
-gradle :app:testDebugUnitTest :app:assembleDebugAndroidTest :app:assembleDebug
-```
-
-APK output:
-
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
-
-The normal CI also smoke-tests `assembleRelease` without signing material; unsigned release outputs from that smoke test are never published.
+Pete's Reps is currently Kotlin + Jetpack Compose with local SQLite history. Build/test commands, SDK versions, APK paths, and ADB instructions are in **[docs/DEVELOPING.md](docs/DEVELOPING.md)**.
 
 ## Architecture
 
