@@ -60,6 +60,12 @@ data class ExercisePrescription(
     val sets: Int,
     val targetPerSet: Int,
     val blockMinutes: Int,
+    /**
+     * Capability bucket this block was selected to train. Normally this is the
+     * exercise family. A one-tap substitute may use a different movement while
+     * preserving the original block's intended training stimulus.
+     */
+    val stimulusFamily: MovementFamily = exercise.family,
     val challengeNote: String? = null,
 ) {
     val totalTarget: Int

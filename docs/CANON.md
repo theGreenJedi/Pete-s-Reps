@@ -26,6 +26,7 @@ The app optimizes for **capability first**. Longevity, working strength, mobilit
 14. **GitHub is source of truth.** Source, engine rules, exercise definitions, build instructions, installation instructions, and architecture documentation must remain recoverable.
 15. **Local first.** No mandatory account, cloud, analytics, advertising, or network dependency.
 16. **Demonstration-ready.** Exercises may attach local video, animation, stills, and/or movement cues. Missing media must never prevent a workout from functioning.
+17. **One-tap substitute.** If a movement is not workable today, one tap must choose another movement without interrogating the user. Preserve the intended capability stimulus and remaining time rather than restarting or redesigning the session.
 
 ## Working strength
 
@@ -75,6 +76,18 @@ At 00:00 the session ends automatically. Save objective results already entered 
 Each current movement may have a subordinate pacing timer. When that timer expires, the app should tell the user to move on, but the master 25-minute timer remains the sole absolute session boundary.
 
 An in-progress session must resume from its original master-clock start after ordinary activity/process recreation. It must never receive a fresh 25 minutes merely because the UI restarted.
+
+## One-tap substitution
+
+A movement can be rejected without supplying a reason. **Swap** means: choose the closest practical alternative and continue.
+
+The substitution engine should preserve, in order of importance, the intended capability stimulus, meaningful goal transfer, approximate difficulty, and the existing block time. It may choose a movement from another catalog family when that better preserves the useful stimulus or materially changes the setup/equipment requirement.
+
+The block's hidden intended stimulus remains attached to the replacement so long-term progression is not distorted merely because the literal exercise changed. Persist the actual replacement movement as the movement performed.
+
+Swapping must not reset the 25-minute master clock. If the session is already running, it also must not restart the current movement's time allowance. The replacement gets whatever time remains.
+
+Do not ask whether the reason was pain, equipment, preference, space, or something else as part of the normal one-tap path. The app is allowed to fail with a simple statement that no useful substitute is available rather than offering a knowingly poor replacement.
 
 ## User input
 
