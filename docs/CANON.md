@@ -66,6 +66,16 @@ There is no visible body-part split, rigid seven-day template, or program-comple
 
 The app shows the complete session before starting, then supports a focused one-movement-at-a-time execution view. The full overview remains available on demand.
 
+## Timing enforcement
+
+The 25-minute ceiling is enforced by one live master clock. It starts when the session starts and never resets between movements. Time spent transitioning, logging a result, viewing the overview, backgrounding the app, or with the screen asleep still counts.
+
+At 00:00 the session ends automatically. Save objective results already entered and treat movements with no recorded result as unattempted rather than inventing zero-rep failures.
+
+Each current movement may have a subordinate pacing timer. When that timer expires, the app should tell the user to move on, but the master 25-minute timer remains the sole absolute session boundary.
+
+An in-progress session must resume from its original master-clock start after ordinary activity/process recreation. It must never receive a fresh 25 minutes merely because the UI restarted.
+
 ## User input
 
 Ask for the smallest useful amount of objective information, such as reps, seconds, distance, or load when relevant. Infer everything else where practical. Do not require journaling, recovery surveys, motivation ratings, or training-theory decisions from the user.
