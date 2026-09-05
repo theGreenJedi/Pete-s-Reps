@@ -1,5 +1,7 @@
 package org.petesreps.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.HorizontalDivider
@@ -17,6 +20,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -25,8 +29,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import org.petesreps.data.TrainingBackup
+import org.petesreps.data.TrainingBackupCodec
 import org.petesreps.data.TrainingDatabase
 import org.petesreps.engine.WorkoutEngine
 import org.petesreps.model.ExercisePrescription
@@ -36,14 +43,52 @@ import org.petesreps.model.Workout
 
 @Composable
 fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
-    var workout by remember { mutableStateOf(engine.generate(database.profile())) }
-    var summary by remember { mutableStateOf(database.summary()) }
+    val context = LocalContext.current
+    var historyRevision by remember { mutableIntStateOf(0) }
+    var workout by remember(historyRevision) { mutableStateOf(engine.generate(database.profile())) }
+    var summary by remember(historyRevision) { mutableStateOf(database.summary()) }
     var completionMessage by remember { mutableStateOf<String?>(null) }
-    val actuals = remember(workout.dayNumber) { mutableMapOf<String, Int>() }
-    var editVersion by remember(workout.dayNumber) { mutableIntStateOf(0) }
-    var started by rememberSaveable(workout.dayNumber) { mutableStateOf(false) }
-    var showOverview by rememberSaveable(workout.dayNumber) { mutableStateOf(false) }
-    var currentIndex by rememberSaveable(workout.dayNumber) { mutableIntStateOf(0) }
+    var pendingRestore by remember { mutableStateOf<TrainingBackup?>(null) }
+    val actuals = remember(workout.dayNumber, historyRevision) { mutableMapOf<String, Int>() }
+    var editVersion by remember(workout.dayNumber, historyRevision) { mutableIntStateOf(0) }
+    var started by rememberSaveable(workout.dayNumber, historyRevision) { mutableStateOf(false) }
+    var showOverview by rememberSaveable(workout.dayNumber, historyRevision) { mutableStateOf(false) }
+    var currentIndex by rememberSaveable(workout.dayNumber, historyRevision) { mutableIntStateOf(0) }
+
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/octet-stream"),
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                val output = context.contentResolver.openOutputStream(uri)
+                    ?: error("Android could not open the selected file.")
+                output.bufferedWriter().use { writer ->
+                    writer.write(TrainingBackupCodec.encode(database.backup()))
+                }
+            }.onSuccess {
+                completionMessage = "Training backup exported."
+            }.onFailure { error ->
+                completionMessage = "Backup export failed: ${error.message ?: "unknown error"}"
+            }
+        }
+    }
+
+    val restoreLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                val input = context.contentResolver.openInputStream(uri)
+                    ?: error("Android could not open the selected file.")
+                val encoded = input.bufferedReader().use { it.readText() }
+                TrainingBackupCodec.decode(encoded)
+            }.onSuccess { backup ->
+                pendingRestore = backup
+            }.onFailure { error ->
+                completionMessage = "Backup could not be read: ${error.message ?: "unknown error"}"
+            }
+        }
+    }
 
     fun completeWorkout() {
         val savedDay = workout.dayNumber
@@ -54,6 +99,39 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
         started = false
         showOverview = false
         currentIndex = 0
+    }
+
+    pendingRestore?.let { backup ->
+        AlertDialog(
+            onDismissRequest = { pendingRestore = null },
+            title = { Text("Restore training history?") },
+            text = {
+                Text(
+                    "This will replace the training history currently on this phone with " +
+                        "${backup.workouts.size} saved session${if (backup.workouts.size == 1) "" else "s"}. " +
+                        "Export the current history first if you may need it later."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        runCatching { database.restoreBackup(backup) }
+                            .onSuccess {
+                                pendingRestore = null
+                                historyRevision += 1
+                                completionMessage = "Training history restored."
+                            }
+                            .onFailure { error ->
+                                pendingRestore = null
+                                completionMessage = "Restore failed: ${error.message ?: "unknown error"}"
+                            }
+                    },
+                ) { Text("Restore") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRestore = null }) { Text("Cancel") }
+            },
+        )
     }
 
     MaterialTheme {
@@ -160,6 +238,21 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
                 item {
                     HorizontalDivider()
                     Summary(summary)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            exportLauncher.launch("petes-reps-backup-${System.currentTimeMillis()}.preps")
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Export training backup")
+                    }
+                    OutlinedButton(
+                        onClick = { restoreLauncher.launch(arrayOf("*/*")) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Restore training backup")
+                    }
                     Spacer(Modifier.height(24.dp))
                 }
             }
