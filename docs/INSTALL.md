@@ -42,6 +42,23 @@ On launch:
 
 The engine's progression, readiness, capability, and goal-selection logic is intentionally invisible during normal use.
 
+## Protecting training history
+
+Pete's Reps 0.3.0 and later can export the complete local training state.
+
+Before uninstalling, replacing the phone, or testing a build that might not install over the current APK:
+
+1. Open Pete's Reps.
+2. Scroll to **Training history**.
+3. Tap **Export training backup**.
+4. Save the suggested `.preps` file somewhere outside the app.
+
+To recover it later, install Pete's Reps, tap **Restore training backup**, select the file, review the session count in the confirmation dialog, and confirm the restore.
+
+The backup includes both visible workout/performance history and the hidden progression/readiness state used by the training engine. Restore validates the file before replacing anything and performs the database replacement transactionally.
+
+See **[BACKUP.md](BACKUP.md)** for the complete format and recovery contract.
+
 ## Core equipment
 
 Pete's Reps currently assumes access to:
@@ -94,13 +111,14 @@ Current CI artifacts are debug builds. Debug signing can differ between build en
 
 Therefore:
 
-- do not treat uninstall/reinstall as a normal update strategy once the device contains meaningful training history
+- export a training backup before any uninstall/reinstall path
+- do not treat uninstall/reinstall as the normal long-term update strategy
 - use consistently signed release APKs for the long-term daily-driver channel once available
 - verify every new release can install over the previous signed release without uninstalling
 - verify local workout history survives that upgrade
-- export/restore of training history remains a planned additional durability feature
+- retain backup/restore as a separate recovery path even after stable signing exists
 
-The release signing procedure includes this upgrade-preservation test as an explicit acceptance gate.
+The release signing procedure includes upgrade preservation as an explicit acceptance gate.
 
 ## Privacy / network behavior
 
