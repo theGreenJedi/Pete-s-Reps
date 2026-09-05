@@ -1,5 +1,6 @@
 package org.petesreps.ui
 
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -22,16 +23,21 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import org.petesreps.data.TrainingBackup
 import org.petesreps.data.TrainingBackupCodec
 import org.petesreps.data.TrainingDatabase
@@ -39,21 +45,41 @@ import org.petesreps.engine.WorkoutEngine
 import org.petesreps.model.ExercisePrescription
 import org.petesreps.model.MeasureUnit
 import org.petesreps.model.TrainingSummary
-import org.petesreps.model.Workout
+import org.petesreps.session.ActiveSessionRun
+import org.petesreps.session.SessionRunStore
+import org.petesreps.session.SessionTiming
 
 @Composable
 fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
     val context = LocalContext.current
+    val runStore = remember { SessionRunStore(context.applicationContext) }
     var historyRevision by remember { mutableIntStateOf(0) }
     var workout by remember(historyRevision) { mutableStateOf(engine.generate(database.profile())) }
     var summary by remember(historyRevision) { mutableStateOf(database.summary()) }
     var completionMessage by remember { mutableStateOf<String?>(null) }
     var pendingRestore by remember { mutableStateOf<TrainingBackup?>(null) }
-    val actuals = remember(workout.dayNumber, historyRevision) { mutableMapOf<String, Int>() }
-    var editVersion by remember(workout.dayNumber, historyRevision) { mutableIntStateOf(0) }
-    var started by rememberSaveable(workout.dayNumber, historyRevision) { mutableStateOf(false) }
+    val restoredRun = remember(workout.dayNumber, historyRevision) { runStore.load(workout.dayNumber) }
+    val actuals = remember(workout.dayNumber, historyRevision) {
+        mutableStateMapOf<String, Int>().apply { putAll(restoredRun?.actuals.orEmpty()) }
+    }
+    var started by rememberSaveable(workout.dayNumber, historyRevision) {
+        mutableStateOf(restoredRun != null)
+    }
     var showOverview by rememberSaveable(workout.dayNumber, historyRevision) { mutableStateOf(false) }
-    var currentIndex by rememberSaveable(workout.dayNumber, historyRevision) { mutableIntStateOf(0) }
+    var currentIndex by rememberSaveable(workout.dayNumber, historyRevision) {
+        mutableIntStateOf(
+            restoredRun?.currentIndex
+                ?.coerceIn(0, workout.prescriptions.lastIndex.coerceAtLeast(0))
+                ?: 0,
+        )
+    }
+    var sessionStartedElapsedMillis by rememberSaveable(workout.dayNumber, historyRevision) {
+        mutableLongStateOf(restoredRun?.sessionStartedElapsedMillis ?: 0L)
+    }
+    var blockStartedElapsedMillis by rememberSaveable(workout.dayNumber, historyRevision) {
+        mutableLongStateOf(restoredRun?.blockStartedElapsedMillis ?: 0L)
+    }
+    var nowElapsedMillis by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/octet-stream"),
@@ -90,15 +116,65 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
         }
     }
 
-    fun completeWorkout() {
+    fun checkpointRun() {
+        if (!started || sessionStartedElapsedMillis <= 0L) return
+        runStore.save(
+            ActiveSessionRun(
+                dayNumber = workout.dayNumber,
+                sessionStartedElapsedMillis = sessionStartedElapsedMillis,
+                blockStartedElapsedMillis = blockStartedElapsedMillis,
+                currentIndex = currentIndex,
+                actuals = actuals.toMap(),
+            )
+        )
+    }
+
+    fun completeWorkout(hardStop: Boolean = false) {
         val savedDay = workout.dayNumber
-        database.completeWorkout(workout, actuals.toMap())
+        // At the hard stop, movements with no entered result are treated as
+        // unattempted rather than fake zero-rep failures. Actual zero remains
+        // recordable because touching the control creates an explicit map entry.
+        val workoutToSave = if (hardStop) {
+            workout.copy(
+                prescriptions = workout.prescriptions.filter { actuals.containsKey(it.exercise.id) }
+            )
+        } else {
+            workout
+        }
+        database.completeWorkout(workoutToSave, actuals.toMap())
+        runStore.clear()
         summary = database.summary()
         workout = engine.generate(database.profile())
-        completionMessage = "Session $savedDay saved."
+        completionMessage = if (hardStop) {
+            "25:00 reached. Session $savedDay stopped and saved."
+        } else {
+            "Session $savedDay saved."
+        }
         started = false
         showOverview = false
         currentIndex = 0
+        sessionStartedElapsedMillis = 0L
+        blockStartedElapsedMillis = 0L
+    }
+
+    fun moveTo(index: Int) {
+        currentIndex = index.coerceIn(0, workout.prescriptions.lastIndex.coerceAtLeast(0))
+        blockStartedElapsedMillis = SystemClock.elapsedRealtime()
+        nowElapsedMillis = blockStartedElapsedMillis
+        checkpointRun()
+    }
+
+    LaunchedEffect(started, sessionStartedElapsedMillis, workout.dayNumber) {
+        if (!started || sessionStartedElapsedMillis <= 0L) return@LaunchedEffect
+        while (true) {
+            val now = SystemClock.elapsedRealtime()
+            nowElapsedMillis = now
+            if (SessionTiming.isExpired(sessionStartedElapsedMillis, now)) {
+                completeWorkout(hardStop = true)
+                break
+            }
+            delay(250L)
+        }
     }
 
     pendingRestore?.let { backup ->
@@ -117,6 +193,7 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
                     onClick = {
                         runCatching { database.restoreBackup(backup) }
                             .onSuccess {
+                                runStore.clear()
                                 pendingRestore = null
                                 historyRevision += 1
                                 completionMessage = "Training history restored."
@@ -144,10 +221,21 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
                     Spacer(Modifier.height(12.dp))
                     Text("Pete's Reps", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        "Session ${workout.dayNumber} • ${workout.cycleDay} of 6 • ${workout.plannedMinutes} min",
+                        "Session ${workout.dayNumber} • ${workout.cycleDay} of 6 • ${workout.plannedMinutes} min programmed",
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     completionMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                }
+
+                if (started) {
+                    item {
+                        SessionClockBanner(
+                            SessionTiming.remainingMillis(
+                                sessionStartedElapsedMillis,
+                                nowElapsedMillis,
+                            )
+                        )
+                    }
                 }
 
                 if (!started || showOverview) {
@@ -172,31 +260,51 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
                         } else {
                             Button(
                                 onClick = {
+                                    val now = SystemClock.elapsedRealtime()
                                     started = true
                                     showOverview = false
                                     currentIndex = 0
+                                    sessionStartedElapsedMillis = now
+                                    blockStartedElapsedMillis = now
+                                    nowElapsedMillis = now
+                                    actuals.clear()
+                                    runStore.save(
+                                        ActiveSessionRun(
+                                            dayNumber = workout.dayNumber,
+                                            sessionStartedElapsedMillis = now,
+                                            blockStartedElapsedMillis = now,
+                                            currentIndex = 0,
+                                            actuals = emptyMap(),
+                                        )
+                                    )
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
-                                Text("Start session")
+                                Text("Start 25:00 session")
                             }
                         }
                     }
                 } else {
                     val prescription = workout.prescriptions[currentIndex]
+                    val blockRemainingMillis = SessionTiming.blockRemainingMillis(
+                        blockStartedAtElapsedMillis = blockStartedElapsedMillis,
+                        nowElapsedMillis = nowElapsedMillis,
+                        blockMinutes = prescription.blockMinutes,
+                    )
                     item {
-                        val ignored = editVersion
                         Text(
                             "Movement ${currentIndex + 1} of ${workout.prescriptions.size}",
                             style = MaterialTheme.typography.labelLarge,
                         )
+                        Spacer(Modifier.height(8.dp))
+                        BlockClockBanner(blockRemainingMillis)
                         Spacer(Modifier.height(8.dp))
                         ExerciseCard(
                             prescription = prescription,
                             actual = actuals[prescription.exercise.id] ?: 0,
                             onActualChange = { value ->
                                 actuals[prescription.exercise.id] = value.coerceAtLeast(0)
-                                editVersion += 1
+                                checkpointRun()
                             },
                         )
                     }
@@ -207,15 +315,15 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
                         ) {
                             if (currentIndex > 0) {
                                 OutlinedButton(
-                                    onClick = { currentIndex -= 1 },
+                                    onClick = { moveTo(currentIndex - 1) },
                                     modifier = Modifier.weight(1f),
                                 ) { Text("Previous") }
                             }
                             if (currentIndex < workout.prescriptions.lastIndex) {
                                 Button(
-                                    onClick = { currentIndex += 1 },
+                                    onClick = { moveTo(currentIndex + 1) },
                                     modifier = Modifier.weight(1f),
-                                ) { Text("Next") }
+                                ) { Text(if (blockRemainingMillis == 0L) "Move on" else "Next") }
                             }
                         }
                         OutlinedButton(
@@ -226,7 +334,7 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
                         }
                         if (currentIndex == workout.prescriptions.lastIndex) {
                             Button(
-                                onClick = ::completeWorkout,
+                                onClick = { completeWorkout() },
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Text("Complete session")
@@ -235,27 +343,60 @@ fun PetesRepsScreen(database: TrainingDatabase, engine: WorkoutEngine) {
                     }
                 }
 
-                item {
-                    HorizontalDivider()
-                    Summary(summary)
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = {
-                            exportLauncher.launch("petes-reps-backup-${System.currentTimeMillis()}.preps")
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Export training backup")
+                if (!started) {
+                    item {
+                        HorizontalDivider()
+                        Summary(summary)
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = {
+                                exportLauncher.launch("petes-reps-backup-${System.currentTimeMillis()}.preps")
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Export training backup")
+                        }
+                        OutlinedButton(
+                            onClick = { restoreLauncher.launch(arrayOf("*/*")) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Restore training backup")
+                        }
+                        Spacer(Modifier.height(24.dp))
                     }
-                    OutlinedButton(
-                        onClick = { restoreLauncher.launch(arrayOf("*/*")) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Restore training backup")
-                    }
-                    Spacer(Modifier.height(24.dp))
+                } else {
+                    item { Spacer(Modifier.height(24.dp)) }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun SessionClockBanner(remainingMillis: Long) {
+    Card(modifier = Modifier.fillMaxWidth().testTag("session-clock")) {
+        Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("SESSION TIME LEFT", style = MaterialTheme.typography.labelLarge)
+            Text(
+                SessionTiming.formatClock(remainingMillis),
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Text("At 00:00, the session stops.", style = MaterialTheme.typography.bodySmall)
+        }
+    }
+}
+
+@Composable
+fun BlockClockBanner(remainingMillis: Long) {
+    Card(modifier = Modifier.fillMaxWidth().testTag("block-clock")) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("MOVEMENT TIME", style = MaterialTheme.typography.labelMedium)
+            Text(
+                if (remainingMillis == 0L) "MOVE ON" else SessionTiming.formatClock(remainingMillis),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+            )
         }
     }
 }
