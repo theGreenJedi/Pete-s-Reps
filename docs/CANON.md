@@ -27,6 +27,7 @@ The app optimizes for **capability first**. Longevity, working strength, mobilit
 15. **Local first.** No mandatory account, cloud, analytics, advertising, or network dependency.
 16. **Demonstration-ready.** Exercises may attach local video, animation, stills, and/or movement cues. Missing media must never prevent a workout from functioning.
 17. **One-tap substitute.** If a movement is not workable today, one tap must choose another movement without interrogating the user. Preserve the intended capability stimulus and remaining time rather than restarting or redesigning the session.
+18. **No unexplained movements.** Every prescribed movement must have an immediately available in-app **How** explanation that describes setup and execution in plain language. Technique cues alone are not a substitute for explaining what the movement actually is. Media is optional; understandable text is mandatory.
 
 ## Working strength
 
@@ -95,4 +96,6 @@ Ask for the smallest useful amount of objective information, such as reps, secon
 
 ## Demonstrations
 
-Text cues ship first. Later, an exercise can point to local media assets. Prefer short, clear, offline demonstrations. External streaming services must not become a core dependency.
+Every catalog movement must ship with a short plain-language text explanation that answers two questions: **How do I set up?** and **What do I actually do?** The app exposes that explanation through **How** both in the pre-session overview and the live movement view. Adding a movement without an explanation is a test failure.
+
+Technique cues are the second layer: short reminders about the important details once the user understands the movement. Later, an exercise can also point to local video, animation, or still assets. Prefer short, clear, offline demonstrations. External streaming services must not become a core dependency, and missing media must never make the movement unknowable.

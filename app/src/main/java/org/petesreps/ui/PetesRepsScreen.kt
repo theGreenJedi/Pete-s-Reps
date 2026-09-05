@@ -38,6 +38,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import org.petesreps.data.ExerciseGuides
 import org.petesreps.data.TrainingBackup
 import org.petesreps.data.TrainingBackupCodec
 import org.petesreps.data.TrainingDatabase
@@ -477,6 +478,7 @@ private fun OverviewCard(
     prescription: ExercisePrescription,
     onSwap: () -> Unit,
 ) {
+    var showHow by rememberSaveable(prescription.exercise.id) { mutableStateOf(false) }
     val unit = if (prescription.exercise.unit == MeasureUnit.REPS) "reps" else "sec"
     val side = if (prescription.exercise.perSide) " / side" else ""
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -491,11 +493,28 @@ private fun OverviewCard(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
-            OutlinedButton(
-                onClick = onSwap,
-                modifier = Modifier.fillMaxWidth().testTag("swap-${prescription.exercise.id}"),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text("Swap")
+                OutlinedButton(
+                    onClick = { showHow = !showHow },
+                    modifier = Modifier.weight(1f).testTag("how-${prescription.exercise.id}"),
+                ) {
+                    Text(if (showHow) "Hide how" else "How")
+                }
+                OutlinedButton(
+                    onClick = onSwap,
+                    modifier = Modifier.weight(1f).testTag("swap-${prescription.exercise.id}"),
+                ) {
+                    Text("Swap")
+                }
+            }
+            if (showHow) {
+                Text(ExerciseGuides.descriptionFor(prescription.exercise), style = MaterialTheme.typography.bodyMedium)
+                prescription.exercise.cues.forEach { cue ->
+                    Text("• $cue", style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
     }
@@ -508,7 +527,7 @@ private fun ExerciseCard(
     onActualChange: (Int) -> Unit,
     onSwap: () -> Unit,
 ) {
-    var showCues by rememberSaveable(prescription.exercise.id) { mutableStateOf(false) }
+    var showHow by rememberSaveable(prescription.exercise.id) { mutableStateOf(false) }
     val unit = if (prescription.exercise.unit == MeasureUnit.REPS) "reps" else "sec"
     val side = if (prescription.exercise.perSide) " / side" else ""
     val increment = if (prescription.exercise.unit == MeasureUnit.SECONDS) 5 else 1
@@ -541,13 +560,16 @@ private fun ExerciseCard(
             ) {
                 Text("Swap")
             }
-            OutlinedButton(onClick = { showCues = !showCues }) {
-                Text(if (showCues) "Hide how" else "How")
+            OutlinedButton(
+                onClick = { showHow = !showHow },
+                modifier = Modifier.fillMaxWidth().testTag("how-current"),
+            ) {
+                Text(if (showHow) "Hide how" else "How")
             }
-            if (showCues) {
-                prescription.exercise.cues.forEach { cue -> Text("• $cue", style = MaterialTheme.typography.bodyMedium) }
-                if (prescription.exercise.demoAsset == null) {
-                    Text("Demo media not added yet.", style = MaterialTheme.typography.bodySmall)
+            if (showHow) {
+                Text(ExerciseGuides.descriptionFor(prescription.exercise), style = MaterialTheme.typography.bodyMedium)
+                prescription.exercise.cues.forEach { cue ->
+                    Text("• $cue", style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
