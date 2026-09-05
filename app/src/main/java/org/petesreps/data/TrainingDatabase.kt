@@ -277,7 +277,9 @@ class TrainingDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         backup.workouts.forEach { item ->
             require(item.id > 0) { "Backup contains an invalid workout id." }
             require(item.dayNumber >= 1) { "Backup contains an invalid session number." }
-            require(item.cycleNumber >= 1 && item.cycleDay in 1..6) { "Backup contains invalid training-week metadata." }
+            // cycle_* columns are legacy storage names. Older v0.1 builds used a 56-day
+            // cycle, while current builds use rolling six-session weeks. Preserve either.
+            require(item.cycleNumber >= 1 && item.cycleDay >= 1) { "Backup contains invalid legacy cycle metadata." }
             require(item.plannedMinutes in 0..25) { "Backup contains a workout above the 25-minute ceiling." }
             require(item.completedAt >= 0) { "Backup contains an invalid workout timestamp." }
         }
