@@ -10,6 +10,8 @@ Android only permits an installed app to be upgraded by another APK signed with 
 
 Treat the release keystore and its passwords as long-lived project credentials.
 
+Pete's Reps also has an app-owned training backup format. Backup/restore is a recovery layer, not a replacement for stable signing. See **[BACKUP.md](BACKUP.md)**.
+
 ## 1. Create the durable release keystore
 
 Create this outside the repository on a trusted machine:
@@ -102,13 +104,15 @@ Before calling the release channel dependable:
 
 1. install a signed release APK
 2. complete at least one Pete's Reps session so local history exists
-3. record the app's displayed workout-history count
-4. build a newer APK with a higher `versionCode` using the same signing key
-5. install it over the existing app without uninstalling
-6. verify Android accepts the update
-7. verify the previous local training history is still present
+3. export a `.preps` training backup and keep it outside the app as a recovery copy
+4. record the app's displayed workout-history count
+5. build a newer APK with a higher `versionCode` using the same signing key
+6. install it over the existing app without uninstalling
+7. verify Android accepts the update
+8. verify the previous local training history is still present without needing the backup
+9. retain the backup as an independent recovery check; optionally restore it on a disposable/test install to verify the exported history remains readable
 
-This is the acceptance test for issue #5.
+This is the acceptance test for issue #5. A working backup does not excuse a broken in-place upgrade; both durability paths should work.
 
 ## Local signed build
 
