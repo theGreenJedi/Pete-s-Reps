@@ -33,12 +33,15 @@ On launch:
 1. Pete's Reps generates the next session from the local training profile.
 2. The first screen shows the complete session overview.
 3. Review the movements and equipment before starting.
-4. Tap **Start session**.
-5. The app switches to one movement at a time.
+4. Tap **Start 25:00 session**. The master session clock starts immediately.
+5. The app switches to one movement at a time and shows both the master time remaining and the current movement's pacing timer.
 6. Record the smallest objective result requested by the current build (reps or seconds).
-7. Use **Next** to continue. **View full session** returns to the overview at any time.
-8. On the final movement, tap **Complete session**.
-9. Pete's Reps stores the results locally and uses them when generating the next session.
+7. Use **Next** to continue. When a movement's pacing timer expires, the app says **MOVE ON**. **View full session** returns to the overview without pausing either clock.
+8. On the final movement, tap **Complete session** if you finish early.
+9. If the master clock reaches **00:00** first, Pete's Reps stops and saves the session automatically.
+10. Pete's Reps uses the recorded results when generating the next session.
+
+The 25-minute clock includes transitions, looking at the overview, logging results, mobility, and stretching. Backgrounding the app or turning off the screen does not pause the session. See **[TIMING.md](TIMING.md)** for the timing contract.
 
 The engine's progression, readiness, capability, and goal-selection logic is intentionally invisible during normal use.
 
@@ -48,7 +51,7 @@ Pete's Reps 0.3.0 and later can export the complete local training state.
 
 Before uninstalling, replacing the phone, or testing a build that might not install over the current APK:
 
-1. Open Pete's Reps.
+1. Open Pete's Reps while no session is running.
 2. Scroll to **Training history**.
 3. Tap **Export training backup**.
 4. Save the suggested `.preps` file somewhere outside the app.
@@ -71,7 +74,7 @@ Conventional dumbbells, barbells, plates, or other weights may be useful later b
 
 ## Build the debug APK yourself
 
-The repository CI runs the unit tests and assembles the debug APK.
+The repository CI runs JVM unit tests, compiles Compose instrumentation tests, and assembles the debug APK.
 
 Local requirements currently include:
 
@@ -82,7 +85,7 @@ Local requirements currently include:
 From the repository root:
 
 ```bash
-gradle :app:testDebugUnitTest :app:assembleDebug
+gradle :app:testDebugUnitTest :app:assembleDebugAndroidTest :app:assembleDebug
 ```
 
 The APK is produced at:

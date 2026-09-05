@@ -26,8 +26,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.5.0'
-      - name: Test and build debug APK
-        run: gradle :app:testDebugUnitTest :app:assembleDebug
+      - name: Test, compile device tests, and build debug APK
+        run: gradle :app:testDebugUnitTest :app:assembleDebugAndroidTest :app:assembleDebug
       - name: Smoke-test release configuration without signing secrets
         run: gradle :app:assembleRelease
       - uses: actions/upload-artifact@v4
