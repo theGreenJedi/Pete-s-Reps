@@ -56,7 +56,6 @@ class TrainingDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
             challengeByFamily = families.associateWith { intState(db, "challenge_${it.name}", 0) },
             successStreakByFamily = families.associateWith { intState(db, "success_${it.name}", 0) },
             underperformanceStreakByFamily = families.associateWith {
-                // Preserve any early-build state that used the old failure_* key name.
                 intState(db, "under_${it.name}", intState(db, "failure_${it.name}", 0))
             },
             lastExerciseByFamily = families.associateWith { stringState(db, "last_${it.name}") },
@@ -83,8 +82,6 @@ class TrainingDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         try {
             val workoutId = db.insertOrThrow("workouts", null, ContentValues().apply {
                 put("day_number", workout.dayNumber)
-                // Column names are retained for database compatibility. They now store the
-                // rolling six-session training week and session number.
                 put("cycle_number", workout.cycleNumber)
                 put("cycle_day", workout.cycleDay)
                 put("focus", workout.focus)
@@ -93,7 +90,7 @@ class TrainingDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
             })
 
             workout.prescriptions.forEach { prescription ->
-                val family = prescription.exercise.family
+                val family = prescription.stimulusFamily
                 val actual = (actualTotals[prescription.exercise.id] ?: 0).coerceAtLeast(0)
                 val prescribed = prescription.totalTarget.coerceAtLeast(1)
                 val challengeKey = "challenge_${family.name}"
@@ -113,8 +110,6 @@ class TrainingDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
                         }
                     }
                     actual * 10 < prescribed * 7 -> {
-                        // This is a material performance drop, not a badge-worthy "failure".
-                        // Repeated drops reduce challenge and create a readiness penalty.
                         underperformance += 1
                         success = 0
                         if (underperformance >= 2) {
@@ -153,17 +148,11 @@ class TrainingDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         }
     }
 
-    /**
-     * Capture every durable fact needed to resume training on another install:
-     * completed sessions, objective performance rows, and hidden engine state.
-     */
     fun backup(): TrainingBackup {
         val db = readableDatabase
         val state = db.rawQuery("SELECT key, value FROM state ORDER BY key", null).use { cursor ->
             buildList {
-                while (cursor.moveToNext()) {
-                    add(BackupState(cursor.getString(0), cursor.getString(1)))
-                }
+                while (cursor.moveToNext()) add(BackupState(cursor.getString(0), cursor.getString(1)))
             }
         }
         val workouts = db.rawQuery(
@@ -216,11 +205,6 @@ class TrainingDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         )
     }
 
-    /**
-     * Replace local history with a validated backup in one transaction. Validation
-     * happens before destructive writes so malformed or incompatible files leave the
-     * current database untouched.
-     */
     fun restoreBackup(backup: TrainingBackup) {
         validateBackup(backup)
         val db = writableDatabase
@@ -277,8 +261,6 @@ class TrainingDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         backup.workouts.forEach { item ->
             require(item.id > 0) { "Backup contains an invalid workout id." }
             require(item.dayNumber >= 1) { "Backup contains an invalid session number." }
-            // cycle_* columns are legacy storage names. Older v0.1 builds used a 56-day
-            // cycle, while current builds use rolling six-session weeks. Preserve either.
             require(item.cycleNumber >= 1 && item.cycleDay >= 1) { "Backup contains invalid legacy cycle metadata." }
             require(item.plannedMinutes in 0..25) { "Backup contains a workout above the 25-minute ceiling." }
             require(item.completedAt >= 0) { "Backup contains an invalid workout timestamp." }
