@@ -153,6 +153,150 @@ class TrainingDatabase(context: Context) : SQLiteOpenHelper(context, DB_NAME, nu
         }
     }
 
+    /**
+     * Capture every durable fact needed to resume training on another install:
+     * completed sessions, objective performance rows, and hidden engine state.
+     */
+    fun backup(): TrainingBackup {
+        val db = readableDatabase
+        val state = db.rawQuery("SELECT key, value FROM state ORDER BY key", null).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(BackupState(cursor.getString(0), cursor.getString(1)))
+                }
+            }
+        }
+        val workouts = db.rawQuery(
+            "SELECT id, day_number, cycle_number, cycle_day, focus, planned_minutes, completed_at FROM workouts ORDER BY id",
+            null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(
+                        BackupWorkout(
+                            id = cursor.getLong(0),
+                            dayNumber = cursor.getInt(1),
+                            cycleNumber = cursor.getInt(2),
+                            cycleDay = cursor.getInt(3),
+                            focus = cursor.getString(4),
+                            plannedMinutes = cursor.getInt(5),
+                            completedAt = cursor.getLong(6),
+                        )
+                    )
+                }
+            }
+        }
+        val performances = db.rawQuery(
+            "SELECT id, workout_id, exercise_id, family, prescribed_total, actual_total, unit, challenge, completed_at FROM performances ORDER BY id",
+            null,
+        ).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    add(
+                        BackupPerformance(
+                            id = cursor.getLong(0),
+                            workoutId = cursor.getLong(1),
+                            exerciseId = cursor.getString(2),
+                            family = cursor.getString(3),
+                            prescribedTotal = cursor.getInt(4),
+                            actualTotal = cursor.getInt(5),
+                            unit = cursor.getString(6),
+                            challenge = cursor.getInt(7),
+                            completedAt = cursor.getLong(8),
+                        )
+                    )
+                }
+            }
+        }
+        return TrainingBackup(
+            createdAtEpochMillis = System.currentTimeMillis(),
+            state = state,
+            workouts = workouts,
+            performances = performances,
+        )
+    }
+
+    /**
+     * Replace local history with a validated backup in one transaction. Validation
+     * happens before destructive writes so malformed or incompatible files leave the
+     * current database untouched.
+     */
+    fun restoreBackup(backup: TrainingBackup) {
+        validateBackup(backup)
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("performances", null, null)
+            db.delete("workouts", null, null)
+            db.delete("state", null, null)
+
+            backup.workouts.sortedBy { it.id }.forEach { item ->
+                db.insertOrThrow("workouts", null, ContentValues().apply {
+                    put("id", item.id)
+                    put("day_number", item.dayNumber)
+                    put("cycle_number", item.cycleNumber)
+                    put("cycle_day", item.cycleDay)
+                    put("focus", item.focus)
+                    put("planned_minutes", item.plannedMinutes)
+                    put("completed_at", item.completedAt)
+                })
+            }
+            backup.performances.sortedBy { it.id }.forEach { item ->
+                db.insertOrThrow("performances", null, ContentValues().apply {
+                    put("id", item.id)
+                    put("workout_id", item.workoutId)
+                    put("exercise_id", item.exerciseId)
+                    put("family", item.family)
+                    put("prescribed_total", item.prescribedTotal)
+                    put("actual_total", item.actualTotal)
+                    put("unit", item.unit)
+                    put("challenge", item.challenge)
+                    put("completed_at", item.completedAt)
+                })
+            }
+            backup.state.forEach { item -> putState(db, item.key, item.value) }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun validateBackup(backup: TrainingBackup) {
+        require(backup.schemaVersion == TrainingBackup.CURRENT_SCHEMA_VERSION) {
+            "Unsupported backup schema ${backup.schemaVersion}."
+        }
+        require(backup.createdAtEpochMillis >= 0) { "Backup creation time is invalid." }
+
+        val stateKeys = backup.state.map { it.key }
+        require(stateKeys.size == stateKeys.toSet().size) { "Backup contains duplicate state keys." }
+        val currentDay = backup.state.firstOrNull { it.key == "current_day" }?.value?.toIntOrNull()
+        require(currentDay != null && currentDay >= 1) { "Backup has no valid current training session." }
+
+        val workoutIds = backup.workouts.map { it.id }
+        require(workoutIds.size == workoutIds.toSet().size) { "Backup contains duplicate workout ids." }
+        backup.workouts.forEach { item ->
+            require(item.id > 0) { "Backup contains an invalid workout id." }
+            require(item.dayNumber >= 1) { "Backup contains an invalid session number." }
+            require(item.cycleNumber >= 1 && item.cycleDay in 1..6) { "Backup contains invalid training-week metadata." }
+            require(item.plannedMinutes in 0..25) { "Backup contains a workout above the 25-minute ceiling." }
+            require(item.completedAt >= 0) { "Backup contains an invalid workout timestamp." }
+        }
+
+        val performanceIds = backup.performances.map { it.id }
+        require(performanceIds.size == performanceIds.toSet().size) { "Backup contains duplicate performance ids." }
+        val workoutIdSet = workoutIds.toSet()
+        backup.performances.forEach { item ->
+            require(item.id > 0) { "Backup contains an invalid performance id." }
+            require(item.workoutId in workoutIdSet) { "Backup contains a performance without its workout." }
+            require(item.exerciseId.isNotBlank()) { "Backup contains a performance without an exercise id." }
+            require(item.family.isNotBlank() && item.unit.isNotBlank()) { "Backup contains incomplete performance metadata." }
+            require(item.prescribedTotal >= 0 && item.actualTotal >= 0 && item.challenge >= 0) {
+                "Backup contains a negative performance value."
+            }
+            require(item.completedAt >= 0) { "Backup contains an invalid performance timestamp." }
+        }
+    }
+
     private fun intState(db: SQLiteDatabase, key: String, default: Int): Int =
         stringState(db, key)?.toIntOrNull() ?: default
 
